@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Solum — Live Island</title>
+<style>
+  :root {
+    --bg: #0b1f2a;
+    --water: #123642;
+    --island: #274b2f;
+    --npc: #f4c95d;
+    --text: #e8f0ee;
+    --panel: rgba(9, 20, 26, 0.85);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, "Segoe UI", sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+  }
+  header {
+    padding: 14px 20px;
+    text-align: center;
+  }
+  header h1 { margin: 0; font-size: 22px; letter-spacing: 0.08em; }
+  header p { margin: 4px 0 0; opacity: 0.6; font-size: 13px; }
+  #stage-wrap { position: relative; }
+  canvas {
+    background: var(--water);
+    border-radius: 12px;
+    border: 1px solid rgba(255,255,255,0.08);
+  }
+  #hud {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    background: var(--panel);
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  #tooltip {
+    position: absolute;
+    display: none;
+    background: var(--panel);
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-size: 12px;
+    pointer-events: none;
+    white-space: nowrap;
+  }
+  #status {
+    margin-top: 8px;
+    font-size: 12px;
+    opacity: 0.6;
+  }
+</style>
+</head>
+<body>
+  <header>
+    <h1>SOLUM</h1>
+    <p>One Island. Twenty Lives. Infinite Outcomes.</p>
+  </header>
+
+  <div id="stage-wrap">
+    <canvas id="stage" width="700" height="700"></canvas>
+    <div id="hud"></div>
+    <div id="tooltip"></div>
+  </div>
+  <div id="status">connecting…</div>
+
+  <script>
+    const WS_URL = "ws://localhost:8000/ws";
+    const canvas = document.getElementById("stage");
+    const ctx = canvas.getContext("2d");
+    const hud = document.getElementById("hud");
+    const tooltip = document.getElementById("tooltip");
+    const statusEl = document.getElementById("status");
+
+    const ISLAND_WIDTH = 100;
+    const ISLAND_HEIGHT = 100;
+    const PADDING = 30;
+
+    let latestState = null;
+    let hoveredNpc = null;
+
+    function toScreen(x, y) {
+      const scaleX = (canvas.width - PADDING * 2) / ISLAND_WIDTH;
+      const scaleY = (canvas.height - PADDING * 2) / ISLAND_HEIGHT;
+      return [PADDING + x * scaleX, PADDING + y * scaleY];
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // island landmass
+      ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue("--island");
+      const [ix, iy] = toScreen(0, 0);
+      const [iw, ih] = [canvas.width - PADDING * 2, canvas.height - PADDING * 2];
+      roundRect(ix, iy, iw, ih, 24);
+      ctx.fill();
+
+      if (!latestState) return;
+
+      for (const npc of latestState.npcs) {
+        const [sx, sy] = toScreen(npc.x, npc.y);
+        ctx.beginPath();
+        ctx.arc(sx, sy, npc === hoveredNpc ? 7 : 5, 0, Math.PI * 2);
+        ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue("--npc");
+        ctx.fill();
+        if (npc === hoveredNpc) {
+          ctx.strokeStyle = "#fff";
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+        }
+      }
+
+      hud.innerHTML = `
+        Day ${latestState.day} — ${String(latestState.hour).padStart(2, "0")}:${String(latestState.minute).padStart(2, "0")}<br/>
+        Weather: ${latestState.weather}<br/>
+        Population: ${latestState.population}<br/>
+        Food ${latestState.resources.food.toFixed(0)} ·
+        Wood ${latestState.resources.wood.toFixed(0)} ·
+        Stone ${latestState.resources.stone.toFixed(0)}
+      `;
+    }
+
+    function roundRect(x, y, w, h, r) {
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.arcTo(x + w, y, x + w, y + h, r);
+      ctx.arcTo(x + w, y + h, x, y + h, r);
+      ctx.arcTo(x, y + h, x, y, r);
+      ctx.arcTo(x, y, x + w, y, r);
+      ctx.closePath();
+    }
+
+    canvas.addEventListener("mousemove", (e) => {
+      if (!latestState) return;
+      const rect = canvas.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+
+      hoveredNpc = null;
+      for (const npc of latestState.npcs) {
+        const [sx, sy] = toScreen(npc.x, npc.y);
+        if (Math.hypot(sx - mx, sy - my) < 8) {
+          hoveredNpc = npc;
+          break;
+        }
+      }
+
+      if (hoveredNpc) {
+        tooltip.style.display = "block";
+        tooltip.style.left = e.clientX + 14 + "px";
+        tooltip.style.top = e.clientY + 10 + "px";
+        tooltip.innerHTML = `
+          <strong>${hoveredNpc.name}</strong> (${hoveredNpc.occupation})<br/>
+          ${hoveredNpc.action} · health ${hoveredNpc.health}% ·
+          hunger ${hoveredNpc.hunger}% · energy ${hoveredNpc.energy}%
+        `;
+      } else {
+        tooltip.style.display = "none";
+      }
+      draw();
+    });
+
+    function connect() {
+      const ws = new WebSocket(WS_URL);
+
+      ws.onopen = () => { statusEl.textContent = "connected — " + WS_URL; };
+      ws.onclose = () => {
+        statusEl.textContent = "disconnected — retrying in 2s";
+        setTimeout(connect, 2000);
+      };
+      ws.onerror = () => ws.close();
+      ws.onmessage = (event) => {
+        latestState = JSON.parse(event.data);
+        draw();
+      };
+    }
+
+    connect();
+    draw();
+  </script>
+</body>
+</html>
