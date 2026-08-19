@@ -1,0 +1,86 @@
+:root {
+  --bg: #0b1f2a;
+  --water: #123642;
+  --island: #274b2f;
+  --npc: #f4c95d;
+  --text: #e8f0ee;
+  --panel: rgba(9, 20, 26, 0.85);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, "Segoe UI", sans-serif;
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 100vh;
+}
+
+header {
+  padding: 14px 20px;
+  text-align: center;
+}
+
+header h1 {
+  margin: 0;
+  font-size: 22px;
+  letter-spacing: 0.08em;
+}
+
+header p {
+  margin: 4px 0 0;
+  opacity: 0.6;
+  font-size: 13px;
+}
+
+.stage-wrap {
+  position: relative;
+}
+
+canvas {
+  background: var(--water);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.hud {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  background: var(--panel);
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.tooltip {
+  position: fixed;
+  background: var(--panel);
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.status {
+  margin-top: 8px;
+  font-size: 12px;
+  opacity: 0.6;
+}
